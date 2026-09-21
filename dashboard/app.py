@@ -3,8 +3,8 @@ import pandas as pd
 
 st.set_page_config(page_title="Cricket Analytics Dashboard", layout="wide")
 
-matches = pd.read_csv('../data/processed/matches_clean.csv')
-deliveries = pd.read_csv('../data/processed/deliveries_clean.csv')
+matches = pd.read_csv('data/processed/matches_clean.csv')
+deliveries = pd.read_csv('data/processed/deliveries_clean.csv')
 
 st.title("🏏 Cricket Performance Analytics Dashboard")
 
