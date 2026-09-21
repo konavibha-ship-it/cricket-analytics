@@ -1,0 +1,2 @@
+cd D:\cricket-analytics
+pip freeze > requirements.txt
