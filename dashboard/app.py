@@ -7,6 +7,7 @@ import os
 import sys
 sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'src'))
 from strength_weakness import batsman_report, bowler_report
+from pitch_visuals import over_by_over_batting, over_by_over_bowling, draw_dismissal_field_diagram, generate_bowling_plan
 
 st.set_page_config(
     page_title="Cricket Analytics Dashboard",
@@ -86,8 +87,8 @@ matches_view = matches if not season_filter else matches[matches['year'].isin(se
 st.title("🏏 Cricket Performance Analytics")
 st.caption("Ball-by-ball IPL data → SQL → ML → live win probability")
 
-tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
-    "📊  Overview", "🌟  Player Impact", "🆚  Matchups", "📈  Win Probability", "🧩  Player Archetypes", "🔍  Scouting Report"
+tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
+    "📊  Overview", "🌟  Player Impact", "🆚  Matchups", "📈  Win Probability", "🧩  Player Archetypes", "🔍  Scouting Report", "🎯  Bowling Plan"
 ])
 
 # ---------------- TAB 1: OVERVIEW ----------------
@@ -329,3 +330,31 @@ with tab6:
             st.dataframe(report['opponent'], use_container_width=True)
         else:
             st.warning("No data found for this player.")
+            # ---------------- TAB 7: BOWLING PLAN ----------------
+with tab7:
+    st.subheader("🎯 Bowling Plan & Field Visualization")
+    st.caption("Built from real phase/venue/dismissal data — field zones are illustrative, not shot-tracking data.")
+
+    player_list = sorted(deliveries['batsman'].unique())
+    selected_player = st.selectbox("Select Batter to Plan Against", player_list, key="bowling_plan_player")
+
+    col1, col2 = st.columns([1, 1])
+
+    with col1:
+        st.markdown("**Over-by-Over Strike Rate**")
+        over_data = over_by_over_batting(selected_player).reset_index()
+        fig = px.bar(over_data, x='over', y='strike_rate',
+                     template="plotly_dark", color='strike_rate', color_continuous_scale='Reds')
+        fig.update_layout(height=350, xaxis_title="Over Number", yaxis_title="Strike Rate")
+        st.plotly_chart(fig, use_container_width=True)
+
+    with col2:
+        st.markdown("**Dismissal Pattern Map**")
+        fig = draw_dismissal_field_diagram(selected_player)
+        if fig:
+            st.pyplot(fig)
+        else:
+            st.info("Not enough dismissal data for this player.")
+
+    st.divider()
+    st.markdown(generate_bowling_plan(selected_player))
