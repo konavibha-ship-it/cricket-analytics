@@ -4,6 +4,9 @@ import plotly.express as px
 import plotly.graph_objects as go
 import joblib
 import os
+import sys
+sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'src'))
+from strength_weakness import batsman_report, bowler_report
 
 st.set_page_config(
     page_title="Cricket Analytics Dashboard",
@@ -83,8 +86,8 @@ matches_view = matches if not season_filter else matches[matches['year'].isin(se
 st.title("🏏 Cricket Performance Analytics")
 st.caption("Ball-by-ball IPL data → SQL → ML → live win probability")
 
-tab1, tab2, tab3, tab4, tab5 = st.tabs([
-    "📊  Overview", "🌟  Player Impact", "🆚  Matchups", "📈  Win Probability", "🧩  Player Archetypes"
+tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
+    "📊  Overview", "🌟  Player Impact", "🆚  Matchups", "📈  Win Probability", "🧩  Player Archetypes", "🔍  Scouting Report"
 ])
 
 # ---------------- TAB 1: OVERVIEW ----------------
@@ -254,3 +257,75 @@ with tab5:
         st.dataframe(player_clusters, use_container_width=True, height=400)
     else:
         st.info("Run src/player_clustering.py to generate this data.")
+        # ---------------- TAB 6: SCOUTING REPORT ----------------
+with tab6:
+    st.subheader("🔍 Player Scouting Report — Strengths & Weaknesses")
+
+    report_type = st.radio("Analyze as:", ["Batsman", "Bowler"], horizontal=True)
+
+    if report_type == "Batsman":
+        player_list = sorted(deliveries['batsman'].unique())
+        selected_player = st.selectbox("Select Batter", player_list)
+        report = batsman_report(selected_player, verbose=False)
+
+        if report:
+            c1, c2, c3 = st.columns(3)
+            c1.metric("Total Runs", report['overall_runs'])
+            c2.metric("Balls Faced", report['overall_balls'])
+            c3.metric("Strike Rate", report['overall_sr'])
+
+            col1, col2 = st.columns(2)
+            with col1:
+                st.markdown("**By Match Phase**")
+                st.dataframe(report['phase'], use_container_width=True)
+                if not report['phase'].empty:
+                    best = report['phase']['strike_rate'].idxmax()
+                    worst = report['phase']['strike_rate'].idxmin()
+                    st.success(f"✅ Strength: {best} (SR {report['phase'].loc[best, 'strike_rate']})")
+                    st.warning(f"⚠️ Weakness: {worst} (SR {report['phase'].loc[worst, 'strike_rate']})")
+
+            with col2:
+                st.markdown("**Dismissal Patterns**")
+                if report['dismissals'] is not None and not report['dismissals'].empty:
+                    fig = px.pie(values=report['dismissals'].values, names=report['dismissals'].index,
+                                 template="plotly_dark", hole=0.4)
+                    st.plotly_chart(fig, use_container_width=True)
+                else:
+                    st.info("No dismissal data available.")
+
+            st.markdown("**Top 5 Venues**")
+            st.dataframe(report['venue'].head(5), use_container_width=True)
+
+            st.markdown("**Vs Opposition Teams**")
+            st.dataframe(report['opponent'], use_container_width=True)
+        else:
+            st.warning("No data found for this player.")
+
+    else:  # Bowler
+        player_list = sorted(deliveries['bowler'].unique())
+        selected_player = st.selectbox("Select Bowler", player_list)
+        report = bowler_report(selected_player, verbose=False)
+
+        if report:
+            c1, c2 = st.columns(2)
+            c1.metric("Total Wickets", report['overall_wickets'])
+            c2.metric("Economy", report['overall_economy'])
+
+            col1, col2 = st.columns(2)
+            with col1:
+                st.markdown("**By Match Phase**")
+                st.dataframe(report['phase'], use_container_width=True)
+                if not report['phase'].empty:
+                    best = report['phase']['economy'].idxmin()
+                    worst = report['phase']['economy'].idxmax()
+                    st.success(f"✅ Strength: {best} (Econ {report['phase'].loc[best, 'economy']})")
+                    st.warning(f"⚠️ Weakness: {worst} (Econ {report['phase'].loc[worst, 'economy']})")
+
+            with col2:
+                st.markdown("**Top 5 Venues**")
+                st.dataframe(report['venue'].head(5), use_container_width=True)
+
+            st.markdown("**Vs Opposition Teams**")
+            st.dataframe(report['opponent'], use_container_width=True)
+        else:
+            st.warning("No data found for this player.")
