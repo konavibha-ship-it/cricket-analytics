@@ -4,3 +4,5 @@ __pycache__/
 *.pyc
 .ipynb_checkpoints/
 data/processed/win_prob_model.pkl
+data/processed/deliveries_clean.csv
+data/processed/cricket.db

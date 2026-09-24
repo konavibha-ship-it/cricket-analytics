@@ -5,9 +5,10 @@ import plotly.graph_objects as go
 import joblib
 import os
 import sys
+
 sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'src'))
 from strength_weakness import batsman_report, bowler_report
-from pitch_visuals import over_by_over_batting, over_by_over_bowling, draw_dismissal_field_diagram, generate_bowling_plan
+from pitch_visuals import over_by_over_batting, draw_dismissal_field_diagram, generate_bowling_plan
 
 st.set_page_config(
     page_title="Cricket Analytics Dashboard",
@@ -52,8 +53,8 @@ def safe_load_csv(path):
 def safe_load_model(path):
     return joblib.load(path) if os.path.exists(path) else None
 
-matches = pd.read_csv(os.path.join(DATA_DIR, 'matches_clean.csv'))
-deliveries = pd.read_csv(os.path.join(DATA_DIR, 'deliveries_clean.csv'))
+matches = pd.read_parquet(os.path.join(DATA_DIR, 'matches_clean.parquet'))
+deliveries = pd.read_parquet(os.path.join(DATA_DIR, 'deliveries_clean.parquet'))
 batting_impact = safe_load_csv(os.path.join(DATA_DIR, 'batting_impact.csv'))
 bowling_impact = safe_load_csv(os.path.join(DATA_DIR, 'bowling_impact.csv'))
 matchups = safe_load_csv(os.path.join(DATA_DIR, 'matchups.csv'))
@@ -65,30 +66,45 @@ PLOTLY_TEMPLATE = "plotly_dark"
 ACCENT = "#ff4b4b"
 
 # ============================================
-# SIDEBAR
+# SIDEBAR — FORMAT + SEASON FILTERS
 # ============================================
 with st.sidebar:
     st.title("🏏 Cricket Analytics")
-    st.caption("IPL ball-by-ball data analysis")
+    st.caption("International, IPL & domestic T20 leagues — 2001–2026")
     st.divider()
+
+    available_formats = sorted(matches['format'].dropna().unique())
+    format_filter = st.multiselect(
+        "Filter by Competition",
+        options=available_formats,
+        default=['IPL']
+    )
+
     season_filter = st.multiselect(
-        "Filter by Season",
+        "Filter by Year",
         options=sorted(matches['year'].dropna().unique()),
         default=[]
     )
     st.divider()
     st.caption("Built with Python, scikit-learn, SHAP, PuLP & Streamlit")
 
-matches_view = matches if not season_filter else matches[matches['year'].isin(season_filter)]
+matches_view = matches.copy()
+if format_filter:
+    matches_view = matches_view[matches_view['format'].isin(format_filter)]
+if season_filter:
+    matches_view = matches_view[matches_view['year'].isin(season_filter)]
+
+deliveries_view = deliveries[deliveries['match_id'].isin(matches_view['match_id'])]
 
 # ============================================
 # HEADER
 # ============================================
 st.title("🏏 Cricket Performance Analytics")
-st.caption("Ball-by-ball IPL data → SQL → ML → live win probability")
+st.caption("Ball-by-ball data → SQL → ML → live win probability")
 
 tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
-    "📊  Overview", "🌟  Player Impact", "🆚  Matchups", "📈  Win Probability", "🧩  Player Archetypes", "🔍  Scouting Report", "🎯  Bowling Plan"
+    "📊  Overview", "🌟  Player Impact", "🆚  Matchups", "📈  Win Probability",
+    "🧩  Player Archetypes", "🔍  Scouting Report", "🎯  Bowling Plan"
 ])
 
 # ---------------- TAB 1: OVERVIEW ----------------
@@ -97,7 +113,7 @@ with tab1:
     c1.metric("Matches", f"{len(matches_view):,}")
     c2.metric("Teams", matches_view['team1'].nunique())
     c3.metric("Seasons", matches_view['year'].nunique())
-    c4.metric("Balls Analyzed", f"{len(deliveries):,}")
+    c4.metric("Balls Analyzed", f"{len(deliveries_view):,}")
 
     col1, col2 = st.columns(2)
 
@@ -114,8 +130,7 @@ with tab1:
         st.subheader("Matches Per Season")
         season_counts = matches_view['year'].value_counts().sort_index().reset_index()
         season_counts.columns = ['year', 'matches']
-        fig = px.line(season_counts, x='year', y='matches', markers=True,
-                       template=PLOTLY_TEMPLATE)
+        fig = px.line(season_counts, x='year', y='matches', markers=True, template=PLOTLY_TEMPLATE)
         fig.update_traces(line_color=ACCENT, line_width=3, marker_size=8)
         fig.update_layout(height=400)
         st.plotly_chart(fig, use_container_width=True)
@@ -124,7 +139,7 @@ with tab1:
 
     with col3:
         st.subheader("Top Run Scorers")
-        top_batsmen = deliveries.groupby('batsman')['batsman_runs'].sum().sort_values(ascending=False).head(10).reset_index()
+        top_batsmen = deliveries_view.groupby('batsman')['batsman_runs'].sum().sort_values(ascending=False).head(10).reset_index()
         fig = px.bar(top_batsmen, x='batsman_runs', y='batsman', orientation='h',
                      template=PLOTLY_TEMPLATE, color='batsman_runs', color_continuous_scale='Oranges')
         fig.update_layout(yaxis={'categoryorder': 'total ascending'}, showlegend=False, height=400)
@@ -132,7 +147,7 @@ with tab1:
 
     with col4:
         st.subheader("Top Wicket Takers")
-        wkts = deliveries[deliveries['dismissal_kind'].notnull()]
+        wkts = deliveries_view[deliveries_view['dismissal_kind'].notnull()]
         top_bowlers = wkts.groupby('bowler').size().sort_values(ascending=False).head(10).reset_index(name='wickets')
         fig = px.bar(top_bowlers, x='wickets', y='bowler', orientation='h',
                      template=PLOTLY_TEMPLATE, color='wickets', color_continuous_scale='Blues')
@@ -141,27 +156,23 @@ with tab1:
 
 # ---------------- TAB 2: PLAYER IMPACT ----------------
 with tab2:
+    st.caption("⚠️ Impact scores below are computed from the full historical dataset and are not affected by the sidebar filter.")
     if batting_impact is not None and bowling_impact is not None:
         col1, col2 = st.columns(2)
-
         with col1:
             st.subheader("🏏 Top 10 Batting Impact")
-            top_bat = batting_impact.head(10)
-            fig = px.bar(top_bat, x='batting_impact', y='batsman', orientation='h',
+            fig = px.bar(batting_impact.head(10), x='batting_impact', y='batsman', orientation='h',
                          template=PLOTLY_TEMPLATE, color='batting_impact', color_continuous_scale='Sunset')
             fig.update_layout(yaxis={'categoryorder': 'total ascending'}, showlegend=False, height=450)
             st.plotly_chart(fig, use_container_width=True)
-
         with col2:
             st.subheader("🎯 Top 10 Bowling Impact")
-            top_bowl = bowling_impact.head(10)
-            fig = px.bar(top_bowl, x='bowling_impact', y='bowler', orientation='h',
+            fig = px.bar(bowling_impact.head(10), x='bowling_impact', y='bowler', orientation='h',
                          template=PLOTLY_TEMPLATE, color='bowling_impact', color_continuous_scale='Teal')
             fig.update_layout(yaxis={'categoryorder': 'total ascending'}, showlegend=False, height=450)
             st.plotly_chart(fig, use_container_width=True)
 
         st.divider()
-        st.subheader("Full Leaderboards")
         c1, c2 = st.columns(2)
         c1.dataframe(batting_impact.head(25), use_container_width=True, height=400)
         c2.dataframe(bowling_impact.head(25), use_container_width=True, height=400)
@@ -170,6 +181,7 @@ with tab2:
 
 # ---------------- TAB 3: MATCHUPS ----------------
 with tab3:
+    st.caption("⚠️ Matchup data is computed from the full historical dataset and is not affected by the sidebar filter.")
     if matchups is not None:
         st.subheader("Batter vs Bowler Head-to-Head")
         col1, col2 = st.columns(2)
@@ -187,8 +199,7 @@ with tab3:
             c4.metric("Dismissals", int(r['dismissals']))
 
             fig = go.Figure(go.Indicator(
-                mode="gauge+number",
-                value=r['strike_rate'],
+                mode="gauge+number", value=r['strike_rate'],
                 title={'text': "Strike Rate in this Matchup"},
                 gauge={'axis': {'range': [0, 200]}, 'bar': {'color': ACCENT}}
             ))
@@ -205,6 +216,7 @@ with tab3:
 
 # ---------------- TAB 4: WIN PROBABILITY ----------------
 with tab4:
+    st.caption("⚠️ Live win probability is trained on T20-format data (IPL). Best used with the IPL filter selected.")
     if state_df is not None and win_model is not None:
         st.subheader("Live Win Probability — Ball by Ball")
         match_ids = state_df['match_id'].unique()
@@ -222,17 +234,14 @@ with tab4:
 
             fig = go.Figure()
             fig.add_trace(go.Scatter(
-                x=match_data['balls_bowled'], y=probs,
-                mode='lines', line=dict(color=ACCENT, width=3),
-                fill='tozeroy', fillcolor='rgba(255,75,75,0.1)',
-                name='Win Probability'
+                x=match_data['balls_bowled'], y=probs, mode='lines',
+                line=dict(color=ACCENT, width=3), fill='tozeroy',
+                fillcolor='rgba(255,75,75,0.1)', name='Win Probability'
             ))
             fig.add_hline(y=50, line_dash="dash", line_color="gray")
-            fig.update_layout(
-                template=PLOTLY_TEMPLATE, height=450,
-                xaxis_title="Balls Bowled", yaxis_title="Win Probability (%)",
-                yaxis_range=[0, 100]
-            )
+            fig.update_layout(template=PLOTLY_TEMPLATE, height=450,
+                               xaxis_title="Balls Bowled", yaxis_title="Win Probability (%)",
+                               yaxis_range=[0, 100])
             st.plotly_chart(fig, use_container_width=True)
 
             current_prob = probs[-1] if len(probs) else 50
@@ -244,29 +253,31 @@ with tab4:
 
 # ---------------- TAB 5: PLAYER ARCHETYPES ----------------
 with tab5:
+    st.caption("⚠️ Clustering is computed from the full historical dataset and is not affected by the sidebar filter.")
     if player_clusters is not None:
         st.subheader("Batter Archetypes (K-Means Clustering)")
         fig = px.scatter(
-            player_clusters, x='strike_rate', y='death_sr',
-            color='cluster', size='total_runs', hover_name='batsman',
-            template=PLOTLY_TEMPLATE, color_continuous_scale='Viridis',
+            player_clusters, x='strike_rate', y='death_sr', color='cluster',
+            size='total_runs', hover_name='batsman', template=PLOTLY_TEMPLATE,
+            color_continuous_scale='Viridis',
             labels={'strike_rate': 'Overall Strike Rate', 'death_sr': 'Death Overs Strike Rate'}
         )
         fig.update_layout(height=500)
         st.plotly_chart(fig, use_container_width=True)
-
         st.dataframe(player_clusters, use_container_width=True, height=400)
     else:
         st.info("Run src/player_clustering.py to generate this data.")
-        # ---------------- TAB 6: SCOUTING REPORT ----------------
+
+# ---------------- TAB 6: SCOUTING REPORT ----------------
 with tab6:
     st.subheader("🔍 Player Scouting Report — Strengths & Weaknesses")
+    st.caption("Filtered by the competitions selected in the sidebar.")
 
     report_type = st.radio("Analyze as:", ["Batsman", "Bowler"], horizontal=True)
 
     if report_type == "Batsman":
-        player_list = sorted(deliveries['batsman'].unique())
-        selected_player = st.selectbox("Select Batter", player_list)
+        player_list = sorted(deliveries_view['batsman'].unique())
+        selected_player = st.selectbox("Select Batter", player_list, key="scout_batter")
         report = batsman_report(selected_player, verbose=False)
 
         if report:
@@ -284,7 +295,6 @@ with tab6:
                     worst = report['phase']['strike_rate'].idxmin()
                     st.success(f"✅ Strength: {best} (SR {report['phase'].loc[best, 'strike_rate']})")
                     st.warning(f"⚠️ Weakness: {worst} (SR {report['phase'].loc[worst, 'strike_rate']})")
-
             with col2:
                 st.markdown("**Dismissal Patterns**")
                 if report['dismissals'] is not None and not report['dismissals'].empty:
@@ -296,15 +306,13 @@ with tab6:
 
             st.markdown("**Top 5 Venues**")
             st.dataframe(report['venue'].head(5), use_container_width=True)
-
             st.markdown("**Vs Opposition Teams**")
             st.dataframe(report['opponent'], use_container_width=True)
         else:
             st.warning("No data found for this player.")
-
-    else:  # Bowler
-        player_list = sorted(deliveries['bowler'].unique())
-        selected_player = st.selectbox("Select Bowler", player_list)
+    else:
+        player_list = sorted(deliveries_view['bowler'].unique())
+        selected_player = st.selectbox("Select Bowler", player_list, key="scout_bowler")
         report = bowler_report(selected_player, verbose=False)
 
         if report:
@@ -321,7 +329,6 @@ with tab6:
                     worst = report['phase']['economy'].idxmax()
                     st.success(f"✅ Strength: {best} (Econ {report['phase'].loc[best, 'economy']})")
                     st.warning(f"⚠️ Weakness: {worst} (Econ {report['phase'].loc[worst, 'economy']})")
-
             with col2:
                 st.markdown("**Top 5 Venues**")
                 st.dataframe(report['venue'].head(5), use_container_width=True)
@@ -330,21 +337,21 @@ with tab6:
             st.dataframe(report['opponent'], use_container_width=True)
         else:
             st.warning("No data found for this player.")
-            # ---------------- TAB 7: BOWLING PLAN ----------------
+
+# ---------------- TAB 7: BOWLING PLAN ----------------
 with tab7:
     st.subheader("🎯 Bowling Plan & Field Visualization")
-    st.caption("Built from real phase/venue/dismissal data — field zones are illustrative, not shot-tracking data.")
+    st.caption("Built from real phase/venue/dismissal data — field zones are illustrative, not shot-tracking data. Filtered by sidebar selection.")
 
-    player_list = sorted(deliveries['batsman'].unique())
+    player_list = sorted(deliveries_view['batsman'].unique())
     selected_player = st.selectbox("Select Batter to Plan Against", player_list, key="bowling_plan_player")
 
     col1, col2 = st.columns([1, 1])
-
     with col1:
         st.markdown("**Over-by-Over Strike Rate**")
         over_data = over_by_over_batting(selected_player).reset_index()
-        fig = px.bar(over_data, x='over', y='strike_rate',
-                     template="plotly_dark", color='strike_rate', color_continuous_scale='Reds')
+        fig = px.bar(over_data, x='over', y='strike_rate', template="plotly_dark",
+                     color='strike_rate', color_continuous_scale='Reds')
         fig.update_layout(height=350, xaxis_title="Over Number", yaxis_title="Strike Rate")
         st.plotly_chart(fig, use_container_width=True)
 

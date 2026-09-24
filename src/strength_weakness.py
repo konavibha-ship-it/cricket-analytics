@@ -4,8 +4,8 @@ import numpy as np
 # ============================================
 # LOAD DATA
 # ============================================
-deliveries = pd.read_csv('../data/processed/deliveries_clean.csv')
-matches = pd.read_csv('../data/processed/matches_clean.csv')
+deliveries = pd.read_parquet('../data/processed/deliveries_clean.parquet')
+matches = pd.read_parquet('../data/processed/matches_clean.parquet')
 
 # Join venue and opposition info onto each delivery
 match_info = matches[['match_id', 'venue', 'team1', 'team2']]

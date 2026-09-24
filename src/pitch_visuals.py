@@ -3,7 +3,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 
-deliveries = pd.read_csv('../data/processed/deliveries_clean.csv')
+deliveries = pd.read_parquet('../data/processed/deliveries_clean.parquet')
 
 # ============================================
 # 1. OVER-BY-OVER SCORING/ECONOMY HEATMAP DATA
