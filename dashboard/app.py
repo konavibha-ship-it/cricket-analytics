@@ -58,7 +58,9 @@ deliveries = pd.read_parquet(os.path.join(DATA_DIR, 'deliveries_clean.parquet'))
 batting_impact = safe_load_csv(os.path.join(DATA_DIR, 'batting_impact.csv'))
 bowling_impact = safe_load_csv(os.path.join(DATA_DIR, 'bowling_impact.csv'))
 matchups = safe_load_csv(os.path.join(DATA_DIR, 'matchups.csv'))
-state_df = safe_load_csv(os.path.join(DATA_DIR, 'match_states.csv'))
+state_df = safe_load_parquet(os.path.join(DATA_DIR, 'match_states.parquet'))
+state_df_odi = safe_load_parquet(os.path.join(DATA_DIR, 'match_states_odi.parquet'))
+win_model_odi = safe_load_model(os.path.join(DATA_DIR, 'win_prob_model_odi.pkl'))
 player_clusters = safe_load_csv(os.path.join(DATA_DIR, 'player_clusters.csv'))
 win_model = safe_load_model(os.path.join(DATA_DIR, 'win_prob_model.pkl'))
 
@@ -216,21 +218,34 @@ with tab3:
 
 # ---------------- TAB 4: WIN PROBABILITY ----------------
 with tab4:
-    st.caption("⚠️ Live win probability is trained on T20-format data (IPL). Best used with the IPL filter selected.")
-    if state_df is not None and win_model is not None:
-        st.subheader("Live Win Probability — Ball by Ball")
-        match_ids = state_df['match_id'].unique()
-        selected_match = st.selectbox("Select a Match", match_ids)
+    st.subheader("Live Win Probability — Ball by Ball")
+
+    model_format = st.radio("Model:", ["T20 (IPL)", "ODI"], horizontal=True)
+
+    if model_format == "T20 (IPL)":
+        active_state_df = state_df
+        active_model = win_model
+        model_note = "Trained on IPL data — 72.5% accuracy, 0.82 ROC-AUC"
+    else:
+        active_state_df = state_df_odi
+        active_model = win_model_odi
+        model_note = "Trained on ODI data — 74.6% accuracy, 0.84 ROC-AUC"
+
+    st.caption(model_note)
+
+    if active_state_df is not None and active_model is not None:
+        match_ids = active_state_df['match_id'].unique()
+        selected_match = st.selectbox("Select a Match", match_ids, key=f"match_select_{model_format}")
 
         features = ['inning', 'current_score', 'wickets_fallen', 'balls_bowled',
                     'balls_remaining', 'target', 'runs_needed', 'required_run_rate', 'current_run_rate']
 
-        match_data = state_df[
-            (state_df['match_id'] == selected_match) & (state_df['inning'] == 2)
+        match_data = active_state_df[
+            (active_state_df['match_id'] == selected_match) & (active_state_df['inning'] == 2)
         ].sort_values('balls_bowled')
 
         if not match_data.empty:
-            probs = win_model.predict_proba(match_data[features])[:, 1] * 100
+            probs = active_model.predict_proba(match_data[features])[:, 1] * 100
 
             fig = go.Figure()
             fig.add_trace(go.Scatter(
@@ -246,10 +261,76 @@ with tab4:
 
             current_prob = probs[-1] if len(probs) else 50
             st.metric("Current Win Probability", f"{current_prob:.1f}%")
+            st.divider()
+            st.subheader("🔮 What-If Predictor — Enter Any Live Scenario")
+            st.caption("Type in a match situation and get an instant prediction from the model.")
+
         else:
             st.warning("No 2nd innings data for this match.")
+
+            st.divider()
+    st.subheader("🔮 What-If Predictor — Enter Any Live Scenario")
+    st.caption("Type in a match situation and get an instant prediction from the model.")
+
+    wc1, wc2, wc3 = st.columns(3)
+    with wc1:
+        wi_score = st.number_input("Current Score", min_value=0, max_value=500, value=100, key="wi_score")
+        wi_wickets = st.number_input("Wickets Fallen", min_value=0, max_value=10, value=3, key="wi_wickets")
+    with wc2:
+        max_balls = 120 if model_format == "T20 (IPL)" else 300
+        wi_balls_bowled = st.number_input("Balls Bowled", min_value=1, max_value=max_balls, value=60, key="wi_balls")
+        wi_target = st.number_input("Target (0 if 1st innings)", min_value=0, max_value=500, value=180, key="wi_target")
+    with wc3:
+        wi_inning = st.selectbox("Innings", [1, 2], index=1, key="wi_inning")
+
+    if st.button("Predict Win Probability", key=f"predict_btn_{model_format}"):
+        balls_remaining = max(max_balls - wi_balls_bowled, 0)
+        overs_completed = wi_balls_bowled / 6
+        current_run_rate = wi_score / overs_completed if overs_completed > 0 else 0
+
+        if wi_inning == 2 and wi_target > 0:
+            runs_needed = wi_target - wi_score
+            required_run_rate = (runs_needed / (balls_remaining / 6)) if balls_remaining > 0 else 0
+        else:
+            runs_needed = 0
+            required_run_rate = 0
+            wi_target = 0
+
+        input_row = pd.DataFrame([{
+            'inning': wi_inning,
+            'current_score': wi_score,
+            'wickets_fallen': wi_wickets,
+            'balls_bowled': wi_balls_bowled,
+            'balls_remaining': balls_remaining,
+            'target': wi_target,
+            'runs_needed': runs_needed,
+            'required_run_rate': required_run_rate,
+            'current_run_rate': current_run_rate
+        }])
+
+        prediction = active_model.predict_proba(input_row[features])[0][1] * 100
+
+        st.metric("Predicted Win Probability", f"{prediction:.1f}%")
+
+        fig = go.Figure(go.Indicator(
+            mode="gauge+number",
+            value=prediction,
+            title={'text': "Win Probability"},
+            gauge={
+                'axis': {'range': [0, 100]},
+                'bar': {'color': ACCENT},
+                'steps': [
+                    {'range': [0, 50], 'color': '#2d2f3b'},
+                    {'range': [50, 100], 'color': '#3a3d4d'}
+                ],
+                'threshold': {'line': {'color': "white", 'width': 3}, 'thickness': 0.8, 'value': 50}
+            }
+        ))
+        fig.update_layout(template=PLOTLY_TEMPLATE, height=300)
+        st.plotly_chart(fig, use_container_width=True)    
     else:
-        st.info("Run src/win_probability_model.py to generate this data.")
+        st.info(f"Model data not found for {model_format}. Run the corresponding training script first.")
+        
 
 # ---------------- TAB 5: PLAYER ARCHETYPES ----------------
 with tab5:

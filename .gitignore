@@ -6,3 +6,5 @@ __pycache__/
 data/processed/win_prob_model.pkl
 data/processed/deliveries_clean.csv
 data/processed/cricket.db
+data/processed/match_states.csv
+data/processed/match_states_odi.csv
