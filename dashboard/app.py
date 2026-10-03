@@ -570,3 +570,8 @@ try:
     render_trajectory_popup()
 except Exception as e:
     st.sidebar.caption(f"Ball trajectory add-on unavailable: {e}")
+try:
+    from live_data.dashboard_popup import render_live_popup
+    render_live_popup()
+except Exception as e:
+    st.sidebar.caption(f"Live player lookup add-on unavailable: {e}")
