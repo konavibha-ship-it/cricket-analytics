@@ -14,13 +14,11 @@ deliveries = deliveries.merge(match_info, on='match_id', how='left')
 deliveries['phase'] = pd.cut(deliveries['over'], bins=[0, 6, 15, 20], labels=['Powerplay', 'Middle', 'Death'])
 
 # Figure out the opposition (bowling team) for each ball, from a BATTER's perspective
-def get_opponent(row):
-    if row['batting_team'] == row['team1']:
-        return row['team2']
-    else:
-        return row['team1']
-
-deliveries['opponent'] = deliveries.apply(get_opponent, axis=1)
+deliveries['opponent'] = np.where(
+    deliveries['batting_team'] == deliveries['team1'],
+    deliveries['team2'],
+    deliveries['team1']
+)
 
 
 # ============================================
