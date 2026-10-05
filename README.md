@@ -25,4 +25,5 @@ interactive live dashboard.
 - Baseline win-prediction model (pre-match features only) achieved **[X]%** accuracy
 
 ## Project Structure
-📐 [System Architecture](docs/architecture.md)
+
+📐 [System Architecture](docs/architecture.md) · 🔧 [Engineering Challenges](docs/engineering-challenges.md)
