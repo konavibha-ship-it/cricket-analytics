@@ -25,11 +25,20 @@ class CricbuzzUnavailable(Exception):
 def _get(path, params=None):
     if not API_KEY:
         raise CricbuzzUnavailable("No RAPIDAPI_KEY set in .env")
+
     resp = requests.get(f"{BASE_URL}{path}", headers=HEADERS, params=params, timeout=10)
+
     if resp.status_code == 429:
         raise CricbuzzUnavailable("Rate limit / quota exceeded for this plan")
-    resp.raise_for_status()
-    return resp.json()
+    if resp.status_code != 200:
+        raise CricbuzzUnavailable(f"API returned status {resp.status_code}")
+    if not resp.text.strip():
+        raise CricbuzzUnavailable("API returned an empty response (no data for this request)")
+
+    try:
+        return resp.json()
+    except ValueError:
+        raise CricbuzzUnavailable("API returned a non-JSON response")
 
 
 def search_player(name):

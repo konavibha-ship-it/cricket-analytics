@@ -45,14 +45,17 @@ st.markdown("""
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.path.join(BASE_DIR, '..', 'data', 'processed')
 
+@st.cache_data(show_spinner="Loading data...")
 def safe_load_csv(path):
     return pd.read_csv(path) if os.path.exists(path) else None
 
-def safe_load_model(path):
-    return joblib.load(path) if os.path.exists(path) else None
-
+@st.cache_data(show_spinner="Loading data...")
 def safe_load_parquet(path):
     return pd.read_parquet(path) if os.path.exists(path) else None
+
+@st.cache_resource(show_spinner="Loading model...")
+def safe_load_model(path):
+    return joblib.load(path) if os.path.exists(path) else None
 
 matches = pd.read_parquet(os.path.join(DATA_DIR, 'matches_clean.parquet'))
 deliveries = pd.read_parquet(os.path.join(DATA_DIR, 'deliveries_clean.parquet'))

@@ -63,19 +63,32 @@ def _live_dialog():
                 choice = st.selectbox("Select player", list(options.keys()), key="live_player_choice")
                 player_id = options[choice]
 
+                batting = None
+                bowling = None
+
                 try:
                     batting = _stats_table(get_player_batting_stats(player_id))
+                except CricbuzzUnavailable as e:
+                    st.warning(f"Batting stats unavailable: {e}")
+                except Exception as e:
+                    st.warning(f"Unexpected error fetching batting stats: {e}")
+
+                try:
                     bowling = _stats_table(get_player_bowling_stats(player_id))
                 except CricbuzzUnavailable as e:
-                    st.error(f"Cricbuzz API unavailable: {e}")
-                    batting = bowling = None
+                    st.warning(f"Bowling stats unavailable: {e}")
+                except Exception as e:
+                    st.warning(f"Unexpected error fetching bowling stats: {e}")
 
-                if batting is not None:
+                if batting is not None and not batting.empty:
                     st.markdown("**Batting — by format**")
                     st.dataframe(batting, use_container_width=True)
                 if bowling is not None and not bowling.empty:
                     st.markdown("**Bowling — by format**")
                     st.dataframe(bowling, use_container_width=True)
+
+                if (batting is None or batting.empty) and (bowling is None or bowling.empty):
+                    st.info("No stats available for this player from the API.")
             elif name:
                 st.info("No players found for that name.")
 
