@@ -1,8 +1,9 @@
 import pandas as pd
 import numpy as np
 
-deliveries = pd.read_parquet('../data/processed/deliveries_clean.parquet')
-matches = pd.read_parquet('../data/processed/matches_clean.parquet')
+from data_loader import load_matches, load_deliveries
+matches = load_matches()
+deliveries = load_deliveries()
 
 
 def build_team_matchup_matrix(team_a, team_b, format_filter='IPL', min_balls=6):

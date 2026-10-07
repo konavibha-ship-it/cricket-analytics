@@ -1,8 +1,9 @@
 import pandas as pd
 import numpy as np
 
-deliveries = pd.read_parquet('../data/processed/deliveries_clean.parquet')
-matches = pd.read_parquet('../data/processed/matches_clean.parquet')
+from data_loader import load_matches, load_deliveries
+deliveries = load_deliveries()
+matches = load_matches()
 
 # Attach match date to each delivery so we can order innings chronologically
 match_dates = matches[['match_id', 'date']]

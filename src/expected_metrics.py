@@ -1,7 +1,8 @@
 import pandas as pd
 import numpy as np
 
-deliveries = pd.read_parquet('../data/processed/deliveries_clean.parquet')
+from data_loader import load_deliveries
+deliveries = load_deliveries()
 
 # ============================================
 # BUILD BASELINE EXPECTATIONS PER (format, phase) SITUATION

@@ -1,8 +1,9 @@
 import pandas as pd
 import numpy as np
 
-matches = pd.read_parquet('../data/processed/matches_clean.parquet')
-deliveries = pd.read_parquet('../data/processed/deliveries_clean.parquet')
+from data_loader import load_matches, load_deliveries
+matches = load_matches()
+deliveries = load_deliveries()
 
 
 def audit_toss_decision(venue, format_filter='IPL'):
