@@ -57,8 +57,12 @@ def safe_load_parquet(path):
 def safe_load_model(path):
     return joblib.load(path) if os.path.exists(path) else None
 
-matches = pd.read_parquet(os.path.join(DATA_DIR, 'matches_clean.parquet'))
-deliveries = pd.read_parquet(os.path.join(DATA_DIR, 'deliveries_clean.parquet'))
+import sys
+sys.path.append(os.path.join(BASE_DIR, '..', 'src'))
+from data_loader import load_matches, load_deliveries
+
+matches = load_matches()
+deliveries = load_deliveries()
 batting_impact = safe_load_csv(os.path.join(DATA_DIR, 'batting_impact.csv'))
 bowling_impact = safe_load_csv(os.path.join(DATA_DIR, 'bowling_impact.csv'))
 matchups = safe_load_csv(os.path.join(DATA_DIR, 'matchups.csv'))
@@ -73,14 +77,17 @@ win_model = safe_load_model(os.path.join(DATA_DIR, 'win_prob_model.pkl'))
 # ============================================
 @st.cache_data(show_spinner="Loading venue intelligence...")
 def cached_venue_comparison(format_filter):
+    from venue_intelligence import compare_all_venues
     return compare_all_venues(min_matches=15, format_filter=format_filter)
 
 @st.cache_data(show_spinner="Computing form rating...")
 def cached_form_rating(player, role):
+    from form_rating import calculate_form_rating
     return calculate_form_rating(player, role=role)
 
 @st.cache_data(show_spinner="Computing expected metrics...")
 def cached_xmetrics(player, role):
+    from expected_metrics import calculate_xruns_xwickets
     return calculate_xruns_xwickets(player, role=role)
 
 PLOTLY_TEMPLATE = "plotly_dark"
@@ -470,8 +477,6 @@ with tab7:
     st.markdown(generate_bowling_plan(selected_player))
     # ---------------- TAB 8: ADVANCED ANALYTICS ----------------
 with tab8:
-    from form_rating import calculate_form_rating
-    from expected_metrics import calculate_xruns_xwickets
     st.subheader("📈 Player Form & Expected Performance")
     st.caption("Form rating uses recency-weighted recent innings. xRuns/xWickets compare actual output against situational expectations (like xG in football).")
 
@@ -481,100 +486,104 @@ with tab8:
     player_pool = sorted(deliveries['batsman'].unique()) if role_key == 'batsman' else sorted(deliveries['bowler'].unique())
     adv_player = st.selectbox("Select Player", player_pool, key="adv_player")
 
-    col1, col2 = st.columns(2)
+    if st.button("Compute Player Analytics", key="compute_adv"):
+        st.session_state["adv_form"] = cached_form_rating(adv_player, role_key)
+        st.session_state["adv_xmetrics"] = cached_xmetrics(adv_player, role_key)
 
-    with col1:
-        st.markdown("**🔥 Form Rating**")
-        form = cached_form_rating(adv_player, role_key)
-        if form:
-            st.metric("Form Trend", form['form_trend'])
-            c1, c2 = st.columns(2)
-            c1.metric("Career Avg", form['career_avg_metric'])
-            c2.metric("Recent (weighted)", form['weighted_recent_metric'])
-            st.caption(f"Based on last {form['innings_considered']} of {form['total_career_innings']} career innings")
-        else:
-            st.info("Not enough career innings for a reliable form rating.")
+    form = st.session_state.get("adv_form")
+    xmetrics = st.session_state.get("adv_xmetrics")
 
-    with col2:
-        st.markdown("**⚡ Expected vs Actual (xRuns / xWickets)**")
-        xmetrics = cached_xmetrics(adv_player, role_key)
-        if xmetrics:
-            if role_key == 'batsman':
-                st.metric("Runs Above Expected", xmetrics['runs_above_expected'])
-                st.metric("Dismissals vs Expected", xmetrics['dismissals_vs_expected'],
-                           help="Negative means fewer dismissals than expected — a good sign")
+    if form is not None or xmetrics is not None:
+        col1, col2 = st.columns(2)
+
+        with col1:
+            st.markdown("**🔥 Form Rating**")
+            if form:
+                st.metric("Form Trend", form['form_trend'])
+                c1, c2 = st.columns(2)
+                c1.metric("Career Avg", form['career_avg_metric'])
+                c2.metric("Recent (weighted)", form['weighted_recent_metric'])
+                st.caption(f"Based on last {form['innings_considered']} of {form['total_career_innings']} career innings")
             else:
-                st.metric("Wickets Above Expected", xmetrics['wickets_above_expected'])
-                st.metric("Runs Saved vs Expected", xmetrics['runs_saved_vs_expected'])
-        else:
-            st.info("Not enough situational data for this player.")
+                st.info("Not enough career innings for a reliable form rating.")
+
+        with col2:
+            st.markdown("**⚡ Expected vs Actual (xRuns / xWickets)**")
+            if xmetrics:
+                if role_key == 'batsman':
+                    st.metric("Runs Above Expected", xmetrics['runs_above_expected'])
+                    st.metric("Dismissals vs Expected", xmetrics['dismissals_vs_expected'],
+                               help="Negative means fewer dismissals than expected — a good sign")
+                else:
+                    st.metric("Wickets Above Expected", xmetrics['wickets_above_expected'])
+                    st.metric("Runs Saved vs Expected", xmetrics['runs_saved_vs_expected'])
+            else:
+                st.info("Not enough situational data for this player.")
+    else:
+        st.info("Click 'Compute Player Analytics' above to start.")
 
 # ---------------- TAB 9: MATCH INTELLIGENCE ----------------
 with tab9:
-    from venue_intelligence import venue_profile, compare_all_venues
+    from venue_intelligence import compare_all_venues
     from par_score_engine import get_par_score
-    from captaincy_auditor import audit_toss_decision, audit_bowling_change_timing
+    from captaincy_auditor import audit_toss_decision
     from team_matchup_matrix import build_team_matchup_matrix, find_key_matchups
+
     st.subheader("🧠 Venue Intelligence, Par Scores & Captaincy Audit")
 
     mi_format = st.selectbox("Format", ['IPL', 'T20I', 'ODI'], key="mi_format")
 
     st.markdown("**🏟️ Venue Rankings**")
-    venue_table = cached_venue_comparison(mi_format)
-    st.dataframe(venue_table, use_container_width=True, height=300)
+    if st.button("Compute Venue Rankings", key="compute_venues"):
+        st.session_state["venue_table"] = cached_venue_comparison(mi_format)
 
-    st.divider()
+    venue_table = st.session_state.get("venue_table")
 
-    mi_venue = st.selectbox("Select a Venue for Detailed Audit", venue_table['venue'].tolist(), key="mi_venue")
+    if venue_table is not None:
+        st.dataframe(venue_table, use_container_width=True, height=300)
 
-    col1, col2 = st.columns(2)
-    with col1:
-        st.markdown("**📊 Par Score**")
-        par = get_par_score(mi_venue, format_filter=mi_format)
-        if par:
-            st.metric("Full Innings Par Score", par['par_score'])
-            st.caption(f"Based on {par['sample_size']} historical matches")
+        st.divider()
 
-    with col2:
-        st.markdown("**🎯 Toss Decision Audit**")
-        audit = audit_toss_decision(mi_venue, format_filter=mi_format)
-        if audit and audit['data_backed_recommendation']:
-            st.metric("Data-Backed Recommendation", audit['data_backed_recommendation'])
-            st.caption(f"Bat first: {audit['bat_first_win_rate_pct']}% win rate ({audit['bat_first_sample']} matches) | "
-                       f"Chase: {audit['chase_win_rate_pct']}% win rate ({audit['chase_sample']} matches)")
+        mi_venue = st.selectbox("Select a Venue for Detailed Audit", venue_table['venue'].tolist(), key="mi_venue")
 
-    st.divider()
-    st.markdown("**🆚 Team-vs-Team Batter/Bowler Matchup Matrix**")
-    all_teams = sorted(matches[matches['format'] == mi_format]['team1'].dropna().unique())
+        col1, col2 = st.columns(2)
+        with col1:
+            st.markdown("**📊 Par Score**")
+            par = get_par_score(mi_venue, format_filter=mi_format)
+            if par:
+                st.metric("Full Innings Par Score", par['par_score'])
+                st.caption(f"Based on {par['sample_size']} historical matches")
 
-    tc1, tc2 = st.columns(2)
-    team_a = tc1.selectbox("Batting Team", all_teams, key="mi_team_a")
-    team_b = tc2.selectbox("Bowling Team", all_teams, key="mi_team_b", index=1 if len(all_teams) > 1 else 0)
+        with col2:
+            st.markdown("**🎯 Toss Decision Audit**")
+            audit = audit_toss_decision(mi_venue, format_filter=mi_format)
+            if audit and audit['data_backed_recommendation']:
+                st.metric("Data-Backed Recommendation", audit['data_backed_recommendation'])
+                st.caption(f"Bat first: {audit['bat_first_win_rate_pct']}% win rate ({audit['bat_first_sample']} matches) | "
+                           f"Chase: {audit['chase_win_rate_pct']}% win rate ({audit['chase_sample']} matches)")
 
-    if team_a != team_b:
-        pivot, matrix_data = build_team_matchup_matrix(team_a, team_b, format_filter=mi_format, min_balls=10)
-        if pivot is not None:
-            favorable_batter, favorable_bowler = find_key_matchups(matrix_data)
-            c1, c2 = st.columns(2)
-            with c1:
-                st.markdown(f"*Best matchups for {team_a} batters*")
-                st.dataframe(favorable_batter[['batsman', 'bowler', 'balls', 'strike_rate']], use_container_width=True)
-            with c2:
-                st.markdown(f"*Best matchups for {team_b} bowlers*")
-                st.dataframe(favorable_bowler[['batsman', 'bowler', 'balls', 'strike_rate']], use_container_width=True)
+        st.divider()
+        st.markdown("**🆚 Team-vs-Team Batter/Bowler Matchup Matrix**")
+        all_teams = sorted(matches[matches['format'] == mi_format]['team1'].dropna().unique())
+
+        tc1, tc2 = st.columns(2)
+        team_a = tc1.selectbox("Batting Team", all_teams, key="mi_team_a")
+        team_b = tc2.selectbox("Bowling Team", all_teams, key="mi_team_b", index=1 if len(all_teams) > 1 else 0)
+
+        if team_a != team_b:
+            pivot, matrix_data = build_team_matchup_matrix(team_a, team_b, format_filter=mi_format, min_balls=10)
+            if pivot is not None:
+                favorable_batter, favorable_bowler = find_key_matchups(matrix_data)
+                c1, c2 = st.columns(2)
+                with c1:
+                    st.markdown(f"*Best matchups for {team_a} batters*")
+                    st.dataframe(favorable_batter[['batsman', 'bowler', 'balls', 'strike_rate']], use_container_width=True)
+                with c2:
+                    st.markdown(f"*Best matchups for {team_b} bowlers*")
+                    st.dataframe(favorable_bowler[['batsman', 'bowler', 'balls', 'strike_rate']], use_container_width=True)
+            else:
+                st.info("Not enough head-to-head data for this pairing.")
         else:
-            st.info("Not enough head-to-head data for this pairing.")
+            st.warning("Select two different teams.")
     else:
-        st.warning("Select two different teams.")
-        # ---------------- BALL TRAJECTORY POPUP (separate add-on) ----------------
-try:
-    sys.path.append(os.path.join(BASE_DIR, '..'))
-    from ball_trajectory.dashboard_popup import render_trajectory_popup
-    render_trajectory_popup()
-except Exception as e:
-    st.sidebar.caption(f"Ball trajectory add-on unavailable: {e}")
-try:
-    from live_data.dashboard_popup import render_live_popup
-    render_live_popup()
-except Exception as e:
-    st.sidebar.caption(f"Live player lookup add-on unavailable: {e}")
+        st.info("Click 'Compute Venue Rankings' above to start.")
