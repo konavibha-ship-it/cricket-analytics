@@ -1,0 +1,16 @@
+{
+  "name": "Cricket Performance Analytics",
+  "short_name": "CricAnalytics",
+  "description": "International cricket analytics platform",
+  "start_url": ".",
+  "display": "standalone",
+  "background_color": "#0e1117",
+  "theme_color": "#ff4b4b",
+  "icons": [
+    {
+      "src": "./static/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}

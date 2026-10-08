@@ -9,11 +9,18 @@ import sys
 sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'src'))
 
 st.set_page_config(
+    
     page_title="Cricket Analytics Dashboard",
     page_icon="🏏",
     layout="wide",
     initial_sidebar_state="expanded"
 )
+st.markdown("""
+    <link rel="manifest" href="./app/static/manifest.json">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-title" content="CricAnalytics">
+    <link rel="apple-touch-icon" href="./app/static/icon-512.png">
+""", unsafe_allow_html=True)
 
 # ============================================
 # CUSTOM STYLING
