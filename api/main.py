@@ -13,6 +13,8 @@ DATA = ROOT / "data" / "processed"
 app = FastAPI(title="Cricket Analytics API")
 from api.batch1 import router as batch1_router
 app.include_router(batch1_router)
+from api.batch2 import router as batch2_router
+app.include_router(batch2_router)
 
 # ---------- Load data once at startup ----------
 model = joblib.load(DATA / "win_prob_model_small.pkl")
