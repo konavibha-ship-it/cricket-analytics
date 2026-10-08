@@ -13,7 +13,7 @@ DATA = ROOT / "data" / "processed"
 app = FastAPI(title="Cricket Analytics API")
 
 # ---------- Load data once at startup ----------
-model = joblib.load(DATA / "win_prob_model.pkl")
+model = joblib.load(DATA / "win_prob_model_small.pkl")
 batters = pd.read_csv(DATA / "batting_impact.csv", encoding="utf-8")
 bowlers = pd.read_csv(DATA / "bowling_impact.csv", encoding="utf-8")
 venues = pd.read_csv(DATA / "venue_intelligence.csv", encoding="utf-8")
