@@ -68,8 +68,15 @@ import sys
 sys.path.append(os.path.join(BASE_DIR, '..', 'src'))
 from data_loader import load_matches, load_deliveries
 
-matches = load_matches()
-deliveries = load_deliveries()
+import time
+_t0 = time.time()
+try:
+    matches = load_matches()
+    deliveries = load_deliveries()
+    st.sidebar.success(f"Data loaded in {time.time() - _t0:.1f}s — {len(matches):,} matches, {len(deliveries):,} deliveries")
+except Exception as e:
+    st.sidebar.error(f"DATA LOAD FAILED: {e}")
+    st.stop()
 batting_impact = safe_load_csv(os.path.join(DATA_DIR, 'batting_impact.csv'))
 bowling_impact = safe_load_csv(os.path.join(DATA_DIR, 'bowling_impact.csv'))
 matchups = safe_load_csv(os.path.join(DATA_DIR, 'matchups.csv'))
