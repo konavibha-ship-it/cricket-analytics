@@ -144,10 +144,10 @@ deliveries_view = deliveries[deliveries['match_id'].isin(matches_view['match_id'
 st.title("🏏 Cricket Performance Analytics")
 st.caption("Ball-by-ball data → SQL → ML → live win probability")
 
-tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9 = st.tabs([
+tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9, tab10, tab11, tab12, tab13 = st.tabs([
     "📊  Overview", "🌟  Player Impact", "🆚  Matchups", "📈  Win Probability",
     "🧩  Player Archetypes", "🔍  Scouting Report", "🎯  Bowling Plan",
-    "📈  Advanced Analytics", "🧠  Match Intelligence"
+    "📈  Advanced Analytics", "🧠  Match Intelligence", "⏱️  Match Phases", "⚡ Win Engine", "📋 Scorecards", "📈 Player Tracking"
 ])
 
 # ---------------- TAB 1: OVERVIEW ----------------
@@ -601,3 +601,20 @@ with tab9:
             st.warning("Select two different teams.")
     else:
         st.info("Click 'Compute Venue Rankings' above to start.")
+        # ---------------- TAB 10: MATCH PHASES ----------------
+with tab10:
+    from phase_tab import render_phase_tab
+    render_phase_tab(DATA_DIR)
+# ---------------- WIN ENGINE ---------------- 
+with tab11:
+    from win_engine_tab import render_win_engine_tab
+    render_win_engine_tab()
+# ---------------- SCORECARDS ---------------- 
+with tab12:
+    from scorecard_tab import render_scorecard_tab
+    render_scorecard_tab()
+# ---------------- PLAYER TRACKING ---------------- 
+with tab13:
+    from player_tracking_tab import render_player_tracking_tab
+    render_player_tracking_tab()
+

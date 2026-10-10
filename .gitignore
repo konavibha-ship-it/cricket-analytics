@@ -9,3 +9,5 @@ data/processed/cricket.db
 data/processed/match_states.csv
 data/processed/match_states_odi.csv
 .env
+
+data/processed/watchlist.json
